@@ -1,12 +1,14 @@
 //! Sends entity-related packets to clients.
 //! Spawn packets, position updates, equipment, animations, etc.
 
+use base::anvil::player::PlayerAbilities;
 use base::{
     metadata::{EntityBitMask, Pose, META_INDEX_ENTITY_BITMASK, META_INDEX_POSE},
     EntityMetadata, Position,
 };
 use common::Game;
 use ecs::{SysResult, SystemExecutor};
+use quill_common::components_effects::WalkEffectModifier;
 use quill_common::{
     components::{OnGround, Sprinting},
     events::{SneakEvent, SprintEvent},
@@ -25,7 +27,8 @@ pub fn register(game: &mut Game, systems: &mut SystemExecutor<Game>) {
         .group::<Server>()
         .add_system(send_entity_movement)
         .add_system(send_entity_sneak_metadata)
-        .add_system(send_entity_sprint_metadata);
+        .add_system(send_entity_sprint_metadata)
+        .add_system(send_entity_properties);
 }
 
 /// Sends entity movement packets.
@@ -105,5 +108,28 @@ fn send_entity_sprint_metadata(game: &mut Game, server: &mut Server) -> SysResul
             client.send_entity_metadata(network_id, metadata.clone());
         });
     }
+    Ok(())
+}
+
+fn send_entity_properties(game: &mut Game, server: &mut Server) -> SysResult {
+    let mut entities = vec![];
+    for (entity, (&position, walkModifier, &network_id)) in game
+        .ecs
+        .query::<(&Position, &mut WalkEffectModifier, &NetworkId)>()
+        .iter()
+    {
+        let mut sum = 0;
+
+        for (effect, modifier) in walkModifier.0.iter() {
+            sum += modifier
+        }
+
+        entities.push((entity, sum))
+    }
+
+    for (entity, modifierSum) in entities {
+        let walk_speed = game.ecs.get::<PlayerAbilities>(entity)?.walk_speed;
+    }
+
     Ok(())
 }

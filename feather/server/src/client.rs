@@ -20,8 +20,8 @@ use common::{
 use libcraft_items::InventorySlot;
 use packets::server::{Particle, SetSlot, SpawnLivingEntity, UpdateLight, WindowConfirmation};
 use protocol::packets::server::{
-    EntityEffect, EntityPosition, EntityPositionAndRotation, EntityTeleport, HeldItemChange,
-    PlayerAbilities, RemoveEntityEffect,
+    EntityEffect, EntityPosition, EntityPositionAndRotation, EntityProperties, EntityTeleport,
+    HeldItemChange, Modifier, PlayerAbilities, Propertie, RemoveEntityEffect,
 };
 use protocol::{
     packets::{
@@ -635,6 +635,15 @@ impl Client {
         self.send_packet(RemoveEntityEffect {
             entity_id: network_id.0,
             effect_id,
+        })
+    }
+
+    pub fn send_entity_update_properties(&self, network_id: NetworkId) {
+        self.send_packet(EntityProperties {
+            entity_id: network_id.0,
+            properties: vec![
+
+            ],
         })
     }
 

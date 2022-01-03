@@ -1186,7 +1186,20 @@ packets! {
     }
 
     EntityProperties {
-        __todo__ LengthInferredVecU8;
+        entity_id VarInt;
+        properties VarIntPrefixedVec<Propertie>;
+    }
+
+    Propertie {
+        key String;
+        value f32;
+        modifiers VarIntPrefixedVec<Modifier>;
+    }
+
+    Modifier {
+        uuid Uuid;
+        amount f32;
+        operation u8;
     }
 
     EntityEffect {

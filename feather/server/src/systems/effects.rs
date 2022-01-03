@@ -153,6 +153,8 @@ fn send_effect_to_client(
         duration as i32,
         active_effect.flags,
     );
+
+    client.send_entity_update_properties(network_id);
 }
 
 // todo change particle color
