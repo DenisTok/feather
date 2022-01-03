@@ -20,8 +20,9 @@ use common::{
 use libcraft_items::InventorySlot;
 use packets::server::{Particle, SetSlot, SpawnLivingEntity, UpdateLight, WindowConfirmation};
 use protocol::packets::server::{
-    EntityEffect, EntityPosition, EntityPositionAndRotation, EntityTeleport, HeldItemChange,
-    PlayerAbilities, RemoveEntityEffect,
+    AcknowledgePlayerDigging, BlockBreakAnimation, EntityEffect, EntityPosition,
+    EntityPositionAndRotation, EntityTeleport, HeldItemChange, PlayerAbilities,
+    PlayerDiggingStatus, RemoveEntityEffect,
 };
 use protocol::{
     packets::{
@@ -635,6 +636,34 @@ impl Client {
         self.send_packet(RemoveEntityEffect {
             entity_id: network_id.0,
             effect_id,
+        })
+    }
+
+    pub fn acknowledge_player_digging(
+        &self,
+        position: ValidBlockPosition,
+        block: BlockId,
+        status: PlayerDiggingStatus,
+        successful: bool,
+    ) {
+        self.send_packet(AcknowledgePlayerDigging {
+            position,
+            block,
+            status,
+            successful,
+        })
+    }
+
+    pub fn block_break_animation(
+        &self,
+        entity_id: u32,
+        position: ValidBlockPosition,
+        destroy_stage: u8,
+    ) {
+        self.send_packet(BlockBreakAnimation {
+            entity_id: i32::from_le_bytes(entity_id.to_le_bytes()),
+            position,
+            destroy_stage,
         })
     }
 

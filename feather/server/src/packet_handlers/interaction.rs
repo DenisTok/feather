@@ -1,5 +1,7 @@
 use crate::{ClientId, NetworkId, Server};
 use base::inventory::{SLOT_HOTBAR_OFFSET, SLOT_OFFHAND};
+use base::Gamemode;
+use common::block_break::{ActiveBreaker, BlockBreaker, DestroyStateChange};
 use common::entities::player::HotbarSlot;
 use common::interactable::InteractableRegistry;
 use common::{Game, Window};
@@ -118,9 +120,90 @@ pub fn handle_player_digging(
     player: Entity,
 ) -> SysResult {
     log::trace!("Got player digging with status {:?}", packet.status);
+    let client = server.clients.get(*game.ecs.get(player)?).unwrap();
     match packet.status {
-        PlayerDiggingStatus::StartDigging | PlayerDiggingStatus::CancelDigging => {
-            game.break_block(packet.position);
+        PlayerDiggingStatus::StartDigging => {
+            if matches!(
+                *game.ecs.get::<Gamemode>(player)?,
+                Gamemode::Creative | Gamemode::Spectator
+            ) {
+                game.break_block(packet.position);
+            } else {
+                let mut breaker = game.ecs.get_mut::<BlockBreaker>(player)?;
+                let window = game.ecs.get::<Window>(player)?;
+                let hotbar_slot = game.ecs.get::<HotbarSlot>(player)?.get();
+                let main_hand = window.item(SLOT_HOTBAR_OFFSET + hotbar_slot)?;
+                *breaker = BlockBreaker::Active(
+                    ActiveBreaker::new(&mut game.world, packet.position, main_hand.item_stack())
+                        .unwrap(),
+                );
+            }
+            let block = match game.block(packet.position) {
+                Some(s) => s,
+                None => return Ok(()),
+            };
+            client.acknowledge_player_digging(
+                packet.position,
+                block,
+                protocol::packets::server::PlayerDiggingStatus::Started,
+                true,
+            );
+            Ok(())
+        }
+        PlayerDiggingStatus::CancelDigging => {
+            let success = {
+                let mut breaker = game.ecs.get_mut::<BlockBreaker>(player)?;
+                let a = breaker.matches_position(packet.position);
+                breaker.cancel();
+                a
+            };
+            game.ecs
+                .insert_entity_event(player, DestroyStateChange(packet.position, 10))?;
+            let block = match game.block(packet.position) {
+                Some(s) => s,
+                None => return Ok(()),
+            };
+            client.acknowledge_player_digging(
+                packet.position,
+                block,
+                protocol::packets::server::PlayerDiggingStatus::Cancelled,
+                success,
+            );
+            Ok(())
+        }
+        PlayerDiggingStatus::FinishDigging => {
+            let mut finished = None;
+            let success = {
+                let mut breaker = game.ecs.get_mut::<BlockBreaker>(player)?;
+                let success = if let Some(f) = breaker.try_finish() {
+                    finished = Some(f);
+                    breaker.cancel();
+                    true
+                } else {
+                    if let BlockBreaker::Active(a) = &mut *breaker {
+                        a.fake_finished = true;
+                        println!("{} ticks remaining", a.ticks_remaining);
+                    }
+                    false
+                };
+                success && breaker.matches_position(packet.position)
+            };
+            if success {
+                println!("confirm");
+                finished.unwrap().break_block(game)?;
+            }
+            game.ecs
+                .insert_entity_event(player, DestroyStateChange(packet.position, 10))?;
+            let block = match game.block(packet.position) {
+                Some(s) => s,
+                None => return Ok(()),
+            };
+            client.acknowledge_player_digging(
+                packet.position,
+                block,
+                protocol::packets::server::PlayerDiggingStatus::Finished,
+                success,
+            );
             Ok(())
         }
         PlayerDiggingStatus::SwapItemInHand => {
@@ -145,7 +228,9 @@ pub fn handle_player_digging(
 
             Ok(())
         }
-        _ => Ok(()),
+        PlayerDiggingStatus::DropItemStack => Ok(()),
+        PlayerDiggingStatus::DropItem => Ok(()),
+        PlayerDiggingStatus::ShootArrow => Ok(()),
     }
 }
 
